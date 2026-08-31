@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+*.log
+.DS_Store
+# Local dev fixture: raw Jira issue dump (contains assignee names/emails).
+# Regenerated locally; never commit.
+server/data/
