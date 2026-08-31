@@ -1,0 +1,58 @@
+name: Publish dashboard to GitHub Pages
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+  schedule:
+    # Every 30 min, 09:00-19:30 IST, Mon-Fri (GitHub cron runs in UTC).
+    - cron: '*/30 3-14 * * 1-5'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Export sprint data from Jira
+        run: node server/export-static.js --closed 6
+        env:
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+
+      - name: Build client (static-data mode)
+        run: npm run build --workspace client
+        env:
+          VITE_STATIC_DATA: 'true'
+          VITE_BASE: '/iota-sprint-tracker/'
+
+      - name: SPA fallback for deep links
+        run: cp client/dist/index.html client/dist/404.html
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: client/dist
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

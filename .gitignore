@@ -6,3 +6,5 @@ dist/
 # Local dev fixture: raw Jira issue dump (contains assignee names/emails).
 # Regenerated locally; never commit.
 server/data/
+# Generated static export for GitHub Pages (built in CI, never committed).
+client/public/data/

@@ -156,7 +156,8 @@ a {
   color: var(--success-ink);
 }
 
-.mode-badge.snapshot {
+.mode-badge.snapshot,
+.mode-badge.static {
   color: var(--warn-ink);
 }
 

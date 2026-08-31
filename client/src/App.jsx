@@ -24,7 +24,11 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <div className="brand">
-          <img className="brand-mark" src="/celigo-monogram.png?v=2" alt="Celigo" />
+          <img
+            className="brand-mark"
+            src={`${import.meta.env.BASE_URL}celigo-monogram.png?v=2`}
+            alt="Celigo"
+          />
           <div>
             <div className="brand-title">Sprint Tracker</div>
             <div className="brand-sub">
@@ -73,9 +77,7 @@ export default function App() {
             </select>
           )}
           {data && (
-            <span className={`mode-badge ${data.mode}`}>
-              {data.mode === 'live' ? 'LIVE' : 'SNAPSHOT'}
-            </span>
+            <span className={`mode-badge ${data.mode}`}>{data.mode.toUpperCase()}</span>
           )}
           {data?.fetchedAt && (
             <span className="fetched-at">
