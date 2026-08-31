@@ -41,7 +41,7 @@ export default function App() {
             alt="Celigo"
           />
           <div>
-            <div className="brand-title">Sprint Tracker</div>
+            <div className="brand-title">Scrum Tracker</div>
             <div className="brand-sub">
               {teamName}
               {data?.sprint ? ` · ${data.sprint.name}` : ''}
