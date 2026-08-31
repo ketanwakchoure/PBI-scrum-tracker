@@ -14,6 +14,11 @@ export const TEAMS = [
     key: 'astra',
     name: 'Astra',
     jiraTeamId: '675eff01-0a49-4da1-af1d-b43cd15b5d02'
+  },
+  {
+    key: 'blitz',
+    name: 'Blitz',
+    jiraTeamId: '7d20c752-9308-44cf-9197-f7faaa0049cb'
   }
 ];
 
