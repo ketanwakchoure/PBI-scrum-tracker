@@ -7,8 +7,11 @@ on:
   schedule:
     # Every 30 min, 09:00-19:30 IST, Mon-Fri (GitHub cron runs in UTC).
     - cron: '*/30 3-14 * * 1-5'
-  # On-demand refresh from the static site: the "Force refresh" button opens a
-  # pre-filled issue titled "[Refresh] ..." (pattern from celigo/UI-Team-Dashboard).
+  # On-demand refresh from the static site (background, via a user-held token).
+  repository_dispatch:
+    types: [dashboard-refresh]
+  # Tokenless fallback: the "Force refresh" button can open a pre-filled issue
+  # titled "[Refresh] ..." (pattern from celigo/UI-Team-Dashboard).
   issues:
     types: [opened]
 

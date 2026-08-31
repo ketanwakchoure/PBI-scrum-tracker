@@ -16,21 +16,9 @@ export default function App() {
   const [teamKey, setTeamKey] = useState('iota');
   const [waitingForData, setWaitingForData] = useState(false);
 
-  // On GitHub Pages, "Force refresh" opens a pre-filled [Refresh] issue; the
-  // repo workflow re-exports Jira data, closes the issue, and redeploys. We
-  // poll the published index until the new data lands, then reload.
-  // (Pattern borrowed from celigo/UI-Team-Dashboard.)
-  const forceRefresh = async () => {
+  // Wait for the CI export to publish new data, then reload the page.
+  const waitForFreshData = async () => {
     const baseline = await getGeneratedAt();
-    const title = encodeURIComponent('[Refresh] dashboard data');
-    const body = encodeURIComponent(
-      'Requesting a sprint-data refresh. This issue is closed automatically when the refresh completes (~3 min).'
-    );
-    window.open(
-      `https://github.com/${REFRESH_REPO}/issues/new?title=${title}&body=${body}`,
-      '_blank',
-      'noopener'
-    );
     setWaitingForData(true);
     const started = Date.now();
     const timer = setInterval(async () => {
@@ -43,6 +31,55 @@ export default function App() {
         setWaitingForData(false);
       }
     }, 20000);
+  };
+
+  // On GitHub Pages, "Force refresh" triggers the refresh workflow in the
+  // background via repository_dispatch, using a GitHub token the user saves
+  // once in this browser (localStorage — never part of the deployed bundle).
+  // Fallback without a token: a pre-filled [Refresh] issue (pattern borrowed
+  // from celigo/UI-Team-Dashboard).
+  const TOKEN_KEY = 'sprintTrackerGithubToken';
+  const forceRefresh = async () => {
+    let token = localStorage.getItem(TOKEN_KEY);
+    if (!token) {
+      token = window.prompt(
+        `One-time setup for background refresh:\n\n` +
+          `Paste a GitHub token that can write to ${REFRESH_REPO} ` +
+          `(fine-grained token with "Contents: Read and write", from ` +
+          `github.com → Settings → Developer settings). It is stored only ` +
+          `in this browser.\n\nLeave empty to use the GitHub-issue fallback instead.`
+      );
+      if (token) localStorage.setItem(TOKEN_KEY, token.trim());
+    }
+    if (token) {
+      const res = await fetch(`https://api.github.com/repos/${REFRESH_REPO}/dispatches`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token.trim()}`,
+          Accept: 'application/vnd.github+json'
+        },
+        body: JSON.stringify({ event_type: 'dashboard-refresh' })
+      });
+      if (res.status === 204) {
+        waitForFreshData();
+        return;
+      }
+      // Bad/expired token: forget it so the next click re-prompts.
+      localStorage.removeItem(TOKEN_KEY);
+      window.alert(`Refresh trigger failed (HTTP ${res.status}). The saved token was cleared — try again.`);
+      return;
+    }
+    // Tokenless fallback: pre-filled [Refresh] issue.
+    const title = encodeURIComponent('[Refresh] dashboard data');
+    const body = encodeURIComponent(
+      'Requesting a sprint-data refresh. This issue is closed automatically when the refresh completes (~3 min).'
+    );
+    window.open(
+      `https://github.com/${REFRESH_REPO}/issues/new?title=${title}&body=${body}`,
+      '_blank',
+      'noopener'
+    );
+    waitForFreshData();
   };
   const { sprints, teams } = useSprintList();
   const sprintState = useSprintData(sprintId, teamKey);
@@ -128,7 +165,7 @@ export default function App() {
               className="btn"
               onClick={forceRefresh}
               disabled={waitingForData}
-              title="Opens a pre-filled GitHub issue that triggers a Jira data refresh; the page reloads when new data is published (~3 min)."
+              title="Triggers a Jira data refresh in the background (one-time GitHub token setup); the page reloads when new data is published (~3 min)."
             >
               {waitingForData ? 'Waiting for fresh data…' : 'Force refresh'}
             </button>
