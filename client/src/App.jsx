@@ -157,11 +157,12 @@ export default function App() {
               })}
             </span>
           )}
-          <button className="btn" onClick={refresh} disabled={loading}>
+          <button type="button" className="btn" onClick={refresh} disabled={loading}>
             {loading ? 'Loading…' : 'Refresh'}
           </button>
           {IS_STATIC && REFRESH_REPO && (
             <button
+              type="button"
               className="btn"
               onClick={forceRefresh}
               disabled={waitingForData}
