@@ -43,7 +43,7 @@ jobs:
         run: npm run build --workspace client
         env:
           VITE_STATIC_DATA: 'true'
-          VITE_BASE: '/iota-sprint-tracker/'
+          VITE_BASE: '/PBI-scrum-tracker/'
 
       - name: SPA fallback for deep links
         run: cp client/dist/index.html client/dist/404.html

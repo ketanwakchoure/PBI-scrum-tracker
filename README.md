@@ -1,4 +1,4 @@
-# IOTA Sprint Tracker
+# PBI Scrum Tracker
 
 Web utility for PBI teams (IOTA, Nexus, Astra) showing, for a selected sprint:
 
