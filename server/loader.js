@@ -73,7 +73,7 @@ export async function fetchLostSpillover(sprintMeta, sprints, team, knownIds) {
   const seen = new Set(knownIds);
   const candidates = [];
   const nextIssueLists = await Promise.all(
-    nextSprints.map((next) => fetchSprintIssues(next.id, team.jiraTeamId))
+    nextSprints.map((next) => fetchSprintIssues(next.id, team))
   );
   for (const nextIssues of nextIssueLists) {
     for (const issue of nextIssues) {
@@ -105,7 +105,7 @@ export async function fetchLostSpillover(sprintMeta, sprints, team, knownIds) {
 }
 
 export async function loadLive(sprintId, team, sprints) {
-  const issues = await fetchSprintIssues(sprintId, team.jiraTeamId);
+  const issues = await fetchSprintIssues(sprintId, team);
   const sprintMeta = sprintId
     ? sprints.find((s) => s.id === Number(sprintId))
     : sprints.find((s) => s.state === 'active');

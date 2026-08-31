@@ -1,4 +1,5 @@
 import config from './config.js';
+import { teamJql } from './teams.js';
 
 const authHeader = () =>
   'Basic ' + Buffer.from(`${config.jiraEmail}:${config.jiraApiToken}`).toString('base64');
@@ -52,9 +53,9 @@ export async function searchIssues(jql, fields) {
   return issues;
 }
 
-export async function fetchSprintIssues(sprintId = null, jiraTeamId = config.iotaTeamId) {
+export async function fetchSprintIssues(sprintId, team) {
   const sprintClause = sprintId ? `sprint = ${Number(sprintId)}` : 'sprint in openSprints()';
-  return searchIssues(`${sprintClause} AND "Team[Team]" = ${jiraTeamId}`, ISSUE_FIELDS);
+  return searchIssues(`${sprintClause} AND ${teamJql(team)}`, ISSUE_FIELDS);
 }
 
 // All sprints on the board (closed + active + future), newest first.

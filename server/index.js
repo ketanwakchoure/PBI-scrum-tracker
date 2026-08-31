@@ -2,7 +2,7 @@ import express from 'express';
 import fs from 'node:fs';
 import config from './config.js';
 import { buildSprintData } from './transform.js';
-import { TEAMS, DEFAULT_TEAM_KEY, resolveTeam } from './teams.js';
+import { TEAMS, DEFAULT_TEAM_KEY, resolveTeam, matchesTeam } from './teams.js';
 import { loadLive, fetchTrimmedBoardSprints } from './loader.js';
 import { loadReleases, loadEpicsData } from './epics.js';
 
@@ -36,10 +36,9 @@ function snapshotSprintMeta() {
 
 function loadSnapshot(sprintId, team) {
   const raw = loadSnapshotRaw();
-  const issues = (raw.issues || []).filter((issue) => {
-    const t = issue.fields?.[config.teamField];
-    return t && (t.id === team.jiraTeamId || t.name === team.name);
-  });
+  const issues = (raw.issues || []).filter((issue) =>
+    matchesTeam(issue.fields?.[config.teamField], team)
+  );
   return buildSprintData({
     issues,
     mode: 'snapshot',

@@ -1,5 +1,6 @@
 import config from './config.js';
 import { searchIssues } from './jira.js';
+import { teamJql } from './teams.js';
 
 // Epic view: releases come from fixVersions on the team's epics; each epic
 // rolls up SP from its tasks, which roll up from their subtasks (leaf level).
@@ -23,7 +24,7 @@ export const NO_RELEASE = '(no release)';
 
 export async function loadReleases(team) {
   const epics = await searchIssues(
-    `project = ${config.projectKey} AND issuetype = Epic AND "Team[Team]" = ${team.jiraTeamId}`,
+    `project = ${config.projectKey} AND issuetype = Epic AND ${teamJql(team)}`,
     ['fixVersions']
   );
   const map = new Map();
@@ -87,7 +88,7 @@ export async function loadEpicsData(team, releaseName) {
   const releaseClause =
     releaseName === NO_RELEASE ? 'fixVersion is EMPTY' : `fixVersion = "${releaseName.replace(/"/g, '')}"`;
   const epics = await searchIssues(
-    `project = ${config.projectKey} AND issuetype = Epic AND "Team[Team]" = ${team.jiraTeamId} AND ${releaseClause} ORDER BY created DESC`,
+    `project = ${config.projectKey} AND issuetype = Epic AND ${teamJql(team)} AND ${releaseClause} ORDER BY created DESC`,
     EPIC_FIELDS
   );
 
