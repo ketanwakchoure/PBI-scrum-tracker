@@ -5,8 +5,10 @@ on:
   push:
     branches: [main]
   schedule:
-    # Every 30 min, 09:00-19:30 IST, Mon-Fri (GitHub cron runs in UTC).
-    - cron: '*/30 3-14 * * 1-5'
+    # Every 15 min, 09:00-19:45 IST, Mon-Fri (GitHub cron runs in UTC).
+    # Actions minutes are free on public repos, so a tight schedule is cheap —
+    # data is never more than ~15 min + build time stale.
+    - cron: '*/15 3-14 * * 1-5'
   # On-demand refresh from the static site (background, via a user-held token).
   repository_dispatch:
     types: [dashboard-refresh]
