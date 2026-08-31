@@ -5,6 +5,19 @@ import { useEffect, useState, useCallback } from 'react';
 const STATIC = import.meta.env.VITE_STATIC_DATA === 'true';
 const BASE = import.meta.env.BASE_URL || '/';
 
+export const IS_STATIC = STATIC;
+// Repo whose [Refresh] issues trigger the data-refresh workflow (baked at build time).
+export const REFRESH_REPO = import.meta.env.VITE_REFRESH_REPO || '';
+
+export async function getGeneratedAt() {
+  try {
+    const body = await fetchJson(`${BASE}data/index.json?t=${Date.now()}`);
+    return body.generatedAt || null;
+  } catch {
+    return null;
+  }
+}
+
 async function fetchJson(url) {
   const res = await fetch(url);
   if (!res.ok) {
