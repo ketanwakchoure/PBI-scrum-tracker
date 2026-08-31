@@ -797,6 +797,13 @@ a {
   margin-bottom: 18px;
 }
 
+.epic-release-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.4px;
+}
+
 .epic-totals {
   display: flex;
   align-items: center;

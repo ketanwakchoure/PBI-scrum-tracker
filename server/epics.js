@@ -119,36 +119,40 @@ export async function loadEpicsData(team, releaseName) {
     sp: round1(issue.fields[config.storyPointsField] || 0)
   });
 
+  // Rollups accumulate RAW sums and round only for display; rounding per node
+  // and then summing would drift by up to ±0.05 per child.
+  const addRaw = (a, b) => ({
+    totalSP: a.totalSP + b.totalSP,
+    doneSP: a.doneSP + b.doneSP,
+    inProgressSP: a.inProgressSP + b.inProgressSP,
+    todoSP: a.todoSP + b.todoSP
+  });
+  const zero = () => ({ totalSP: 0, doneSP: 0, inProgressSP: 0, todoSP: 0 });
+
+  let releaseRaw = zero();
   const epicNodes = epics.map((epic) => {
+    let epicRaw = zero();
     const taskNodes = (tasksByEpic[epic.key] || []).map((task) => {
       const kids = subtasksByParent[task.key] || [];
       // Leaf rule (same as the Sprint Overview): a task's SP lives on its
       // subtasks when it has them, otherwise on the task itself.
       const leaves = kids.length ? kids : [task];
+      const raw = bucketize(leaves);
+      epicRaw = addRaw(epicRaw, raw);
       return {
         ...shape(task),
-        ...rounded(bucketize(leaves)),
+        ...rounded(raw),
         subtasks: kids
           .map(shape)
           .sort((a, b) => (a.statusCategory === 'done') - (b.statusCategory === 'done') || b.sp - a.sp)
       };
     });
     taskNodes.sort((a, b) => b.remainingSP - a.remainingSP || b.totalSP - a.totalSP);
+    releaseRaw = addRaw(releaseRaw, epicRaw);
 
-    const epicSum = taskNodes.reduce(
-      (a, t) => ({
-        totalSP: a.totalSP + t.totalSP,
-        doneSP: a.doneSP + t.doneSP,
-        inProgressSP: a.inProgressSP + t.inProgressSP,
-        todoSP: a.todoSP + t.todoSP,
-        doneCount: a.doneCount + (t.statusCategory === 'done' ? 1 : 0),
-        count: a.count + 1
-      }),
-      { totalSP: 0, doneSP: 0, inProgressSP: 0, todoSP: 0, doneCount: 0, count: 0 }
-    );
     return {
       ...shape(epic),
-      ...rounded(epicSum),
+      ...rounded(epicRaw),
       taskCount: taskNodes.length,
       doneTaskCount: taskNodes.filter((t) => t.statusCategory === 'done').length,
       tasks: taskNodes
@@ -156,17 +160,7 @@ export async function loadEpicsData(team, releaseName) {
   });
   epicNodes.sort((a, b) => b.remainingSP - a.remainingSP || b.totalSP - a.totalSP);
 
-  const totals = rounded(
-    epicNodes.reduce(
-      (a, e) => ({
-        totalSP: a.totalSP + e.totalSP,
-        doneSP: a.doneSP + e.doneSP,
-        inProgressSP: a.inProgressSP + e.inProgressSP,
-        todoSP: a.todoSP + e.todoSP
-      }),
-      { totalSP: 0, doneSP: 0, inProgressSP: 0, todoSP: 0 }
-    )
-  );
+  const totals = rounded(releaseRaw);
 
   return {
     mode: 'live',

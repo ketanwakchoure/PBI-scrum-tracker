@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { NavLink, Route, Routes } from 'react-router-dom';
-import { useSprintData, useSprintList } from './api.js';
+import { useEffect, useState } from 'react';
+import { NavLink, Route, Routes, useLocation } from 'react-router-dom';
+import { useSprintData, useSprintList, useReleases } from './api.js';
 import Overview from './pages/Overview.jsx';
 import Burnup from './pages/Burnup.jsx';
 import Epics from './pages/Epics.jsx';
@@ -15,11 +15,21 @@ const STATE_LABEL = { active: 'Active', closed: 'Closed', future: 'Future' };
 export default function App() {
   const [sprintId, setSprintId] = useState('');
   const [teamKey, setTeamKey] = useState('iota');
+  const [release, setRelease] = useState('');
   const { sprints, teams } = useSprintList();
+  const releases = useReleases(teamKey);
   const sprintState = useSprintData(sprintId, teamKey);
   const { data, loading, error, refresh } = sprintState;
   const left = workingDaysLeft(data?.burnup);
   const teamName = data?.team?.name || teams.find((t) => t.key === teamKey)?.name || 'IOTA (PBI)';
+  const onEpicsPage = useLocation().pathname.startsWith('/epics');
+
+  // Default to the newest release; reset when the team's release list changes.
+  useEffect(() => {
+    if (releases?.length && !releases.some((r) => r.name === release)) {
+      setRelease(releases[0].name);
+    }
+  }, [releases, release]);
 
   return (
     <div className="app">
@@ -65,21 +75,38 @@ export default function App() {
               ))}
             </select>
           )}
-          {sprints.length > 0 && (
-            <select
-              className="sprint-select"
-              value={sprintId}
-              onChange={(e) => setSprintId(e.target.value)}
-              title="Pick a sprint"
-            >
-              <option value="">Active sprint</option>
-              {sprints.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name} · {STATE_LABEL[s.state] || s.state}
-                </option>
-              ))}
-            </select>
-          )}
+          {/* The second picker swaps with the page: sprints normally, releases on the Epics tab. */}
+          {onEpicsPage
+            ? (releases?.length || 0) > 0 && (
+                <select
+                  className="sprint-select"
+                  value={release}
+                  onChange={(e) => setRelease(e.target.value)}
+                  title="Pick a release"
+                >
+                  {releases.map((r) => (
+                    <option key={r.name} value={r.name}>
+                      {r.name}
+                      {r.released ? ' · Released' : ''} ({r.epicCount} epic{r.epicCount !== 1 ? 's' : ''})
+                    </option>
+                  ))}
+                </select>
+              )
+            : sprints.length > 0 && (
+                <select
+                  className="sprint-select"
+                  value={sprintId}
+                  onChange={(e) => setSprintId(e.target.value)}
+                  title="Pick a sprint"
+                >
+                  <option value="">Active sprint</option>
+                  {sprints.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} · {STATE_LABEL[s.state] || s.state}
+                    </option>
+                  ))}
+                </select>
+              )}
           {data && (
             <span className={`mode-badge ${data.mode}`}>{data.mode.toUpperCase()}</span>
           )}
@@ -112,7 +139,10 @@ export default function App() {
             path="/burnup"
             element={<Burnup key={`${teamKey}-${data?.sprint?.id || sprintId || 'active'}`} {...sprintState} />}
           />
-          <Route path="/epics" element={<Epics key={teamKey} teamKey={teamKey} />} />
+          <Route
+            path="/epics"
+            element={<Epics key={teamKey} teamKey={teamKey} release={release} />}
+          />
         </Routes>
       </main>
     </div>

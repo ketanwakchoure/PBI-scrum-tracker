@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { useReleases, useEpics } from '../api.js';
+import { useState } from 'react';
+import { useEpics } from '../api.js';
 
 function SegmentBar({ node }) {
   const total = node.totalSP || 1;
@@ -114,16 +114,9 @@ function TaskRow({ task, isOpen, onToggle }) {
   );
 }
 
-export default function Epics({ teamKey }) {
-  const releases = useReleases(teamKey);
-  const [release, setRelease] = useState('');
+export default function Epics({ teamKey, release }) {
   const [openEpics, setOpenEpics] = useState(() => new Set());
   const [openTasks, setOpenTasks] = useState(() => new Set());
-
-  // Default to the newest release once the list arrives.
-  useEffect(() => {
-    if (releases?.length && !release) setRelease(releases[0].name);
-  }, [releases, release]);
 
   const { data, error, loading } = useEpics(teamKey, release);
 
@@ -136,28 +129,13 @@ export default function Epics({ teamKey }) {
   const toggleEpic = toggle(setOpenEpics);
   const toggleTask = toggle(setOpenTasks);
 
-  if (releases === null) return <div className="loading">Loading releases…</div>;
-  if (!releases.length) {
-    return <div className="loading">No releases found for this team's epics.</div>;
-  }
+  if (!release) return <div className="loading">Loading releases…</div>;
 
   return (
     <>
-      <section className="epic-toolbar">
-        <select
-          className="sprint-select"
-          value={release}
-          onChange={(e) => setRelease(e.target.value)}
-          title="Pick a release"
-        >
-          {releases.map((r) => (
-            <option key={r.name} value={r.name}>
-              {r.name}
-              {r.released ? ' · Released' : ''} ({r.epicCount} epic{r.epicCount !== 1 ? 's' : ''})
-            </option>
-          ))}
-        </select>
-        {data && (
+      {data && (
+        <section className="epic-toolbar">
+          <h1 className="epic-release-title">{release}</h1>
           <div className="epic-totals">
             <span className="lg done">{data.totals.doneSP} burned</span>
             <span className="lg inprogress">{data.totals.inProgressSP} in progress</span>
@@ -166,8 +144,8 @@ export default function Epics({ teamKey }) {
               {data.totals.remainingSP}/{data.totals.totalSP} SP to burn
             </span>
           </div>
-        )}
-      </section>
+        </section>
+      )}
 
       {error && <div className="error-banner">Failed to load epics: {error}</div>}
       {loading && <div className="loading">Loading epics…</div>}
