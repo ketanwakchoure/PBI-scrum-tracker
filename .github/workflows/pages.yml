@@ -5,23 +5,14 @@ on:
   push:
     branches: [main]
   schedule:
-    # Every 15 min, 09:00-19:45 IST, Mon-Fri (GitHub cron runs in UTC).
-    # Actions minutes are free on public repos, so a tight schedule is cheap —
-    # data is never more than ~15 min + build time stale.
-    - cron: '*/15 3-14 * * 1-5'
-  # On-demand refresh from the static site (background, via a user-held token).
-  repository_dispatch:
-    types: [dashboard-refresh]
-  # Tokenless fallback: the "Force refresh" button can open a pre-filled issue
-  # titled "[Refresh] ..." (pattern from celigo/UI-Team-Dashboard).
-  issues:
-    types: [opened]
+    # Every 10 min, 09:00-19:50 IST, Mon-Fri (GitHub cron runs in UTC).
+    # Actions minutes are free on public repos, so a tight schedule is cheap.
+    - cron: '*/10 3-14 * * 1-5'
 
 permissions:
   contents: read
   pages: write
   id-token: write
-  issues: write
 
 concurrency:
   group: pages
@@ -29,7 +20,6 @@ concurrency:
 
 jobs:
   build-and-deploy:
-    if: github.event_name != 'issues' || startsWith(github.event.issue.title, '[Refresh]')
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -55,7 +45,6 @@ jobs:
         env:
           VITE_STATIC_DATA: 'true'
           VITE_BASE: '/PBI-scrum-tracker/'
-          VITE_REFRESH_REPO: ${{ github.repository }}
 
       - name: SPA fallback for deep links
         run: cp client/dist/index.html client/dist/404.html
@@ -68,22 +57,3 @@ jobs:
 
       - id: deployment
         uses: actions/deploy-pages@v4
-
-      - name: Close the refresh request issue
-        if: github.event_name == 'issues'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const issue_number = context.payload.issue.number;
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number,
-              body: 'Dashboard data refreshed and deployed. Reload the page to see it.'
-            });
-            await github.rest.issues.update({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number,
-              state: 'closed'
-            });

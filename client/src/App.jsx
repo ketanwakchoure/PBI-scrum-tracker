@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, Route, Routes } from 'react-router-dom';
-import { useSprintData, useSprintList, IS_STATIC, REFRESH_REPO, getGeneratedAt } from './api.js';
+import { useSprintData, useSprintList } from './api.js';
 import Overview from './pages/Overview.jsx';
 import Burnup from './pages/Burnup.jsx';
 
@@ -14,73 +14,6 @@ const STATE_LABEL = { active: 'Active', closed: 'Closed', future: 'Future' };
 export default function App() {
   const [sprintId, setSprintId] = useState('');
   const [teamKey, setTeamKey] = useState('iota');
-  const [waitingForData, setWaitingForData] = useState(false);
-
-  // Wait for the CI export to publish new data, then reload the page.
-  const waitForFreshData = async () => {
-    const baseline = await getGeneratedAt();
-    setWaitingForData(true);
-    const started = Date.now();
-    const timer = setInterval(async () => {
-      const generatedAt = await getGeneratedAt();
-      if (generatedAt && generatedAt !== baseline) {
-        clearInterval(timer);
-        window.location.reload();
-      } else if (Date.now() - started > 15 * 60 * 1000) {
-        clearInterval(timer);
-        setWaitingForData(false);
-      }
-    }, 20000);
-  };
-
-  // On GitHub Pages, "Force refresh" triggers the refresh workflow in the
-  // background via repository_dispatch, using a GitHub token the user saves
-  // once in this browser (localStorage — never part of the deployed bundle).
-  // Fallback without a token: a pre-filled [Refresh] issue (pattern borrowed
-  // from celigo/UI-Team-Dashboard).
-  const TOKEN_KEY = 'sprintTrackerGithubToken';
-  const forceRefresh = async () => {
-    let token = localStorage.getItem(TOKEN_KEY);
-    if (!token) {
-      token = window.prompt(
-        `One-time setup for background refresh:\n\n` +
-          `Paste a GitHub token that can write to ${REFRESH_REPO} ` +
-          `(fine-grained token with "Contents: Read and write", from ` +
-          `github.com → Settings → Developer settings). It is stored only ` +
-          `in this browser.\n\nLeave empty to use the GitHub-issue fallback instead.`
-      );
-      if (token) localStorage.setItem(TOKEN_KEY, token.trim());
-    }
-    if (token) {
-      const res = await fetch(`https://api.github.com/repos/${REFRESH_REPO}/dispatches`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token.trim()}`,
-          Accept: 'application/vnd.github+json'
-        },
-        body: JSON.stringify({ event_type: 'dashboard-refresh' })
-      });
-      if (res.status === 204) {
-        waitForFreshData();
-        return;
-      }
-      // Bad/expired token: forget it so the next click re-prompts.
-      localStorage.removeItem(TOKEN_KEY);
-      window.alert(`Refresh trigger failed (HTTP ${res.status}). The saved token was cleared — try again.`);
-      return;
-    }
-    // Tokenless fallback: pre-filled [Refresh] issue.
-    const title = encodeURIComponent('[Refresh] dashboard data');
-    const body = encodeURIComponent(
-      'Requesting a sprint-data refresh. This issue is closed automatically when the refresh completes (~3 min).'
-    );
-    window.open(
-      `https://github.com/${REFRESH_REPO}/issues/new?title=${title}&body=${body}`,
-      '_blank',
-      'noopener'
-    );
-    waitForFreshData();
-  };
   const { sprints, teams } = useSprintList();
   const sprintState = useSprintData(sprintId, teamKey);
   const { data, loading, error, refresh } = sprintState;
@@ -160,17 +93,6 @@ export default function App() {
           <button type="button" className="btn" onClick={refresh} disabled={loading}>
             {loading ? 'Loading…' : 'Refresh'}
           </button>
-          {IS_STATIC && REFRESH_REPO && (
-            <button
-              type="button"
-              className="btn"
-              onClick={forceRefresh}
-              disabled={waitingForData}
-              title="Triggers a Jira data refresh in the background (one-time GitHub token setup); the page reloads when new data is published (~3 min)."
-            >
-              {waitingForData ? 'Waiting for fresh data…' : 'Force refresh'}
-            </button>
-          )}
         </div>
       </header>
 
