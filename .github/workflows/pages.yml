@@ -5,9 +5,11 @@ on:
   push:
     branches: [main]
   schedule:
-    # Every 10 min, 09:00-19:50 IST, Mon-Fri (GitHub cron runs in UTC).
-    # Actions minutes are free on public repos, so a tight schedule is cheap.
-    - cron: '*/10 3-14 * * 1-5'
+    # Every 10 min, work hours IST, Mon-Fri (GitHub cron runs in UTC).
+    # Offset minutes on purpose: GitHub's scheduler is oversubscribed at the
+    # popular :00/:10/:20 marks and silently drops low-priority runs there;
+    # odd minutes fire far more reliably.
+    - cron: '7,17,27,37,47,57 3-14 * * 1-5'
 
 permissions:
   contents: read
