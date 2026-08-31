@@ -1,5 +1,5 @@
 {
-  "name": "iota-sprint-tracker",
+  "name": "scrum-tracker",
   "version": "0.1.0",
   "private": true,
   "description": "IOTA team sprint SP tracker and per-developer burndown",

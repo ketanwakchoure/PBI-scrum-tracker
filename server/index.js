@@ -170,6 +170,6 @@ app.get('/api/health', (_req, res) => {
 
 app.listen(config.port, () => {
   console.log(
-    `iota-sprint-tracker server on http://localhost:${config.port} (mode: ${config.liveMode ? 'live' : 'snapshot'})`
+    `scrum-tracker server on http://localhost:${config.port} (mode: ${config.liveMode ? 'live' : 'snapshot'})`
   );
 });
