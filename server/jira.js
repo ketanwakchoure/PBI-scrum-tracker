@@ -36,15 +36,13 @@ const ISSUE_FIELDS = [
   config.teamField
 ];
 
-export async function fetchSprintIssues(sprintId = null, jiraTeamId = config.iotaTeamId) {
-  const sprintClause = sprintId ? `sprint = ${Number(sprintId)}` : 'sprint in openSprints()';
-  const jql = `${sprintClause} AND "Team[Team]" = ${jiraTeamId}`;
+export async function searchIssues(jql, fields) {
   const issues = [];
   let nextPageToken;
   do {
     const page = await jiraRequest('POST', '/rest/api/3/search/jql', {
       jql,
-      fields: ISSUE_FIELDS,
+      fields,
       maxResults: 100,
       ...(nextPageToken ? { nextPageToken } : {})
     });
@@ -52,6 +50,11 @@ export async function fetchSprintIssues(sprintId = null, jiraTeamId = config.iot
     nextPageToken = page.isLast ? undefined : page.nextPageToken;
   } while (nextPageToken);
   return issues;
+}
+
+export async function fetchSprintIssues(sprintId = null, jiraTeamId = config.iotaTeamId) {
+  const sprintClause = sprintId ? `sprint = ${Number(sprintId)}` : 'sprint in openSprints()';
+  return searchIssues(`${sprintClause} AND "Team[Team]" = ${jiraTeamId}`, ISSUE_FIELDS);
 }
 
 // All sprints on the board (closed + active + future), newest first.

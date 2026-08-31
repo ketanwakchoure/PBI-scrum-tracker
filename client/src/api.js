@@ -55,6 +55,61 @@ export function useSprintData(sprintId, teamKey) {
   return { data, error, loading, refresh: () => load(true) };
 }
 
+// Deterministic filename slug for a release (shared with the static export).
+export const releaseSlug = (name) => name.replace(/[^a-zA-Z0-9.]/g, '_');
+
+export function useReleases(teamKey) {
+  const [releases, setReleases] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    setReleases(null);
+    const url = STATIC
+      ? `${BASE}data/epics/${teamKey}/releases.json`
+      : `/api/releases?team=${teamKey}`;
+    fetchJson(url)
+      .then((body) => {
+        if (!cancelled) setReleases(body.releases || []);
+      })
+      .catch(() => {
+        if (!cancelled) setReleases([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [teamKey]);
+  return releases;
+}
+
+export function useEpics(teamKey, release) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    if (!release) return;
+    let cancelled = false;
+    setData(null);
+    setError(null);
+    setLoading(true);
+    const url = STATIC
+      ? `${BASE}data/epics/${teamKey}/${releaseSlug(release)}.json`
+      : `/api/epics?team=${teamKey}&release=${encodeURIComponent(release)}`;
+    fetchJson(url)
+      .then((body) => {
+        if (!cancelled) setData(body);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [teamKey, release]);
+  return { data, error, loading };
+}
+
 export function useSprintList() {
   const [sprints, setSprints] = useState([]);
   const [teams, setTeams] = useState([]);

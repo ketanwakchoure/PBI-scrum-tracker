@@ -788,6 +788,98 @@ a {
   white-space: nowrap;
 }
 
+/* ---------- epics page ---------- */
+.epic-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.epic-totals {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 12px;
+  color: var(--ink-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+.epic-totals-total {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 999px;
+  padding: 4px 12px;
+}
+
+.task-key {
+  width: 92px;
+  flex-shrink: 0;
+}
+
+.epic-name-block {
+  width: 330px;
+}
+
+.epic-tasks {
+  border-top: 1px solid var(--hairline);
+  background: var(--surface-1);
+  padding: 8px 12px 12px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.epic-task {
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-btn);
+  overflow: hidden;
+}
+
+.epic-task:hover,
+.epic-task.open {
+  border-color: var(--hairline-strong);
+}
+
+.task-head {
+  padding: 10px 14px;
+  gap: 14px;
+}
+
+.task-name-block {
+  width: 300px;
+}
+
+.task-summary {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-assignee {
+  color: var(--ink-subtle);
+}
+
+.epic-task .tracker-table-wrap {
+  background: var(--surface-3);
+  padding: 4px 16px 10px 24px;
+}
+
+.epic-empty {
+  font-size: 12px;
+  color: var(--ink-subtle);
+  padding: 10px 16px;
+}
+
 /* ---------- responsive ---------- */
 @media (max-width: 900px) {
   .stat-grid {

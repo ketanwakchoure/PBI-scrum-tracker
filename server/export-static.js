@@ -5,6 +5,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { TEAMS, DEFAULT_TEAM_KEY } from './teams.js';
 import { loadLive, fetchTrimmedBoardSprints, assertLiveMode } from './loader.js';
+import { loadReleases, loadEpicsData, NO_RELEASE } from './epics.js';
+
+// Deterministic filename slug for a release (mirrored in client/src/api.js).
+const releaseSlug = (name) => name.replace(/[^a-zA-Z0-9.]/g, '_');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -42,6 +46,34 @@ for (const team of TEAMS) {
     } catch (err) {
       console.error(`logName=exportFailed, team=${team.key}, sprint=${label}, error=${err.message}`);
     }
+  }
+}
+
+// Epic view: per team, export the unreleased releases plus the two most
+// recently released ones (full history would blow up CI time).
+const releasedCount = Number(argValue('--released', '2'));
+for (const team of TEAMS) {
+  try {
+    const releases = await loadReleases(team);
+    const chosen = releases.filter(
+      (r, i) =>
+        r.name !== NO_RELEASE &&
+        (!r.released || releases.filter((x) => x.released).indexOf(r) < releasedCount)
+    );
+    for (const r of chosen) {
+      try {
+        const data = await loadEpicsData(team, r.name);
+        data.mode = 'static';
+        write(path.join('epics', team.key, `${releaseSlug(r.name)}.json`), data);
+        exported++;
+        console.log(`exported epics/${team.key}/${r.name} (${data.epics.length} epics)`);
+      } catch (err) {
+        console.error(`logName=epicExportFailed, team=${team.key}, release=${r.name}, error=${err.message}`);
+      }
+    }
+    write(path.join('epics', team.key, 'releases.json'), { releases: chosen });
+  } catch (err) {
+    console.error(`logName=releasesExportFailed, team=${team.key}, error=${err.message}`);
   }
 }
 

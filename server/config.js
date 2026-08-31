@@ -15,6 +15,7 @@ const config = {
   jiraApiToken: process.env.JIRA_API_TOKEN || '',
   iotaTeamId: process.env.IOTA_TEAM_ID || '827e555d-3cbc-4be4-a2d4-595a7b3ba5ef-1031',
   boardId: Number(process.env.JIRA_BOARD_ID) || 1536,
+  projectKey: process.env.JIRA_PROJECT_KEY || 'PRE',
   storyPointsField: process.env.STORY_POINTS_FIELD || 'customfield_10102',
   sprintField: process.env.SPRINT_FIELD || 'customfield_10105',
   teamField: process.env.TEAM_FIELD || 'customfield_12000',

@@ -3,6 +3,7 @@ import { NavLink, Route, Routes } from 'react-router-dom';
 import { useSprintData, useSprintList } from './api.js';
 import Overview from './pages/Overview.jsx';
 import Burnup from './pages/Burnup.jsx';
+import Epics from './pages/Epics.jsx';
 
 function workingDaysLeft(burnup) {
   if (!burnup?.workingDays?.length) return null;
@@ -44,6 +45,9 @@ export default function App() {
           </NavLink>
           <NavLink to="/burnup" className={({ isActive }) => `tab${isActive ? ' active' : ''}`}>
             Burnup
+          </NavLink>
+          <NavLink to="/epics" className={({ isActive }) => `tab${isActive ? ' active' : ''}`}>
+            Epics
           </NavLink>
         </nav>
         <div className="topbar-right">
@@ -108,6 +112,7 @@ export default function App() {
             path="/burnup"
             element={<Burnup key={`${teamKey}-${data?.sprint?.id || sprintId || 'active'}`} {...sprintState} />}
           />
+          <Route path="/epics" element={<Epics key={teamKey} teamKey={teamKey} />} />
         </Routes>
       </main>
     </div>

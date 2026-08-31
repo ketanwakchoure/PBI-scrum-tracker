@@ -4,6 +4,7 @@ import config from './config.js';
 import { buildSprintData } from './transform.js';
 import { TEAMS, DEFAULT_TEAM_KEY, resolveTeam } from './teams.js';
 import { loadLive, fetchTrimmedBoardSprints } from './loader.js';
+import { loadReleases, loadEpicsData } from './epics.js';
 
 const app = express();
 
@@ -118,6 +119,47 @@ app.get('/api/sprint', async (req, res) => {
     res.json(data);
   } catch (err) {
     console.error(`logName=sprintDataFailed, error=${err.message}`);
+    res.status(502).json({ error: err.message });
+  }
+});
+
+const epicCache = new Map(); // key -> { data, at }; releases + epic trees
+const EPIC_TTL = 10 * 60 * 1000;
+
+async function cachedEpic(key, force, loader) {
+  const hit = epicCache.get(key);
+  if (!force && hit && Date.now() - hit.at < EPIC_TTL) return hit.data;
+  const data = await loader();
+  epicCache.set(key, { data, at: Date.now() });
+  return data;
+}
+
+app.get('/api/releases', async (req, res) => {
+  try {
+    if (!config.liveMode) throw new Error('Epic view requires live Jira credentials (.env).');
+    const team = resolveTeam(req.query.team);
+    const releases = await cachedEpic(`releases:${team.key}`, false, () => loadReleases(team));
+    res.json({ team: { key: team.key, name: team.name }, releases });
+  } catch (err) {
+    console.error(`logName=releasesFailed, error=${err.message}`);
+    res.status(502).json({ error: err.message });
+  }
+});
+
+app.get('/api/epics', async (req, res) => {
+  try {
+    if (!config.liveMode) throw new Error('Epic view requires live Jira credentials (.env).');
+    if (!req.query.release) throw new Error('release query param is required');
+    const team = resolveTeam(req.query.team);
+    const release = String(req.query.release);
+    const data = await cachedEpic(
+      `epics:${team.key}:${release}`,
+      req.query.refresh === 'true',
+      () => loadEpicsData(team, release)
+    );
+    res.json(data);
+  } catch (err) {
+    console.error(`logName=epicsFailed, error=${err.message}`);
     res.status(502).json({ error: err.message });
   }
 });
