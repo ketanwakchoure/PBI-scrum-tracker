@@ -1079,6 +1079,14 @@ a {
   cursor: pointer;
 }
 
+.grooming-head.clickable {
+  cursor: pointer;
+}
+
+.grooming-head.clickable:hover {
+  background: var(--surface-2);
+}
+
 .chevron-btn {
   background: none;
   border: none;

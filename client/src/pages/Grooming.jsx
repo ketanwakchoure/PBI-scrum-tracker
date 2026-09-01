@@ -22,6 +22,7 @@ function SpInput({ original, value, onChange }) {
       placeholder="SP"
       value={value !== undefined ? value : original ?? ''}
       onChange={(e) => onChange(e.target.value)}
+      onClick={(e) => e.stopPropagation()}
       title={dirty ? `Will update (was ${original ?? 'unset'})` : 'Story points'}
     />
   );
@@ -320,16 +321,21 @@ export default function Grooming({ teamKey, sprintId }) {
           const isOpen = open.has(t.key);
           return (
             <div key={t.key} className={`dev-card${isOpen ? ' open' : ''}`}>
-              <div className="grooming-head">
-                <button type="button" className={`chevron-btn${isOpen ? ' up' : ''}`} onClick={() => toggle(t.key)}>
-                  ▾
-                </button>
+              <div
+                className="grooming-head clickable"
+                onClick={() => toggle(t.key)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === 'Enter' && toggle(t.key)}
+              >
+                <span className={`chevron-btn${isOpen ? ' up' : ''}`}>▾</span>
                 <div className="task-key mono">
                   <a
                     href={`${data.jiraBaseUrl}/browse/${t.key}`}
                     target="_blank"
                     rel="noreferrer"
                     className="issue-link"
+                    onClick={(e) => e.stopPropagation()}
                   >
                     {t.key}
                   </a>
@@ -348,7 +354,14 @@ export default function Grooming({ teamKey, sprintId }) {
                   value={spEdits[t.key]}
                   onChange={(v) => setSpEdits((p) => ({ ...p, [t.key]: v }))}
                 />
-                <button type="button" className="btn btn-small" onClick={() => addDraft(t)}>
+                <button
+                  type="button"
+                  className="btn btn-small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    addDraft(t);
+                  }}
+                >
                   + Subtask
                 </button>
               </div>
