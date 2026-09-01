@@ -1117,6 +1117,45 @@ a {
   flex-shrink: 0;
 }
 
+.btn-accent {
+  background: rgba(94, 106, 210, 0.18);
+  border: 1px solid rgba(123, 134, 240, 0.65);
+  color: #aab2ff;
+  font-weight: 600;
+}
+
+.btn-accent:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--accent), #7b86f0);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 2px 12px rgba(94, 106, 210, 0.45);
+}
+
+.btn-danger {
+  background: rgba(224, 102, 95, 0.14);
+  border: 1px solid rgba(224, 102, 95, 0.55);
+  color: #f0938d;
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: var(--radius-btn);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 0.15s, color 0.15s, box-shadow 0.15s;
+}
+
+.btn-danger:hover {
+  background: #c4453d;
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 2px 12px rgba(224, 102, 95, 0.4);
+}
+
+.btn-danger:active {
+  transform: scale(0.97);
+}
+
 .grooming-sp.dirty {
   border-color: var(--accent);
   color: #fff;

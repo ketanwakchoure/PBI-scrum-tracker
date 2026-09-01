@@ -94,8 +94,8 @@ function NewSubtaskRow({ draft, types, components, onChange, onRemove }) {
           onChange={(v) => onChange({ extraFields: { ...draft.extraFields, [f.key]: v } })}
         />
       ))}
-      <button type="button" className="link-btn" onClick={onRemove}>
-        remove
+      <button type="button" className="btn-danger" onClick={onRemove} title="Discard this draft subtask">
+        ✕ Remove
       </button>
     </div>
   );
@@ -356,7 +356,7 @@ export default function Grooming({ teamKey, sprintId }) {
                 />
                 <button
                   type="button"
-                  className="btn btn-small"
+                  className="btn btn-small btn-accent"
                   onClick={(e) => {
                     e.stopPropagation();
                     addDraft(t);
