@@ -203,6 +203,8 @@ export default function Grooming({ teamKey, sprintId }) {
   const addDraft = (tracker) => {
     const first = types[0];
     if (!first) return;
+    // Team convention: subtasks carry the "Common" component.
+    const common = data.components.find((c) => c.name === 'Common');
     setOpen((prev) => new Set(prev).add(tracker.key));
     setDrafts((prev) => ({
       ...prev,
@@ -212,7 +214,7 @@ export default function Grooming({ teamKey, sprintId }) {
           issueTypeId: first.id,
           summary: `${first.name}: ${tracker.key} - ${tracker.summary}`,
           storyPoints: '',
-          componentIds: tracker.components.map((c) => c.id),
+          componentIds: common ? [common.id] : tracker.components.map((c) => c.id),
           extraFields: {}
         }
       ]
