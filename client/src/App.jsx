@@ -23,9 +23,7 @@ export default function App() {
   const { data, loading, error, refresh } = sprintState;
   const left = workingDaysLeft(data?.burnup);
   const teamName = data?.team?.name || teams.find((t) => t.key === teamKey)?.name || 'IOTA (PBI)';
-  const pathname = useLocation().pathname;
-  const onEpicsPage = pathname.startsWith('/epics');
-  const onGroomingPage = pathname.startsWith('/grooming');
+  const onEpicsPage = useLocation().pathname.startsWith('/epics');
 
   // Default to the newest release; reset when the team's release list changes.
   useEffect(() => {
@@ -83,9 +81,9 @@ export default function App() {
               ))}
             </select>
           )}
-          {/* The second picker swaps with the page: sprints normally, releases on
-              the Epics tab, nothing on Grooming (the sheet drives that page). */}
-          {onGroomingPage ? null : onEpicsPage
+          {/* The second picker swaps with the page: sprints normally (including
+              Grooming, which is sprint-driven), releases on the Epics tab. */}
+          {onEpicsPage
             ? (releases?.length || 0) > 0 && (
                 <select
                   className="sprint-select"
@@ -152,7 +150,14 @@ export default function App() {
             path="/epics"
             element={<Epics key={teamKey} teamKey={teamKey} release={release} />}
           />
-          {!IS_STATIC && <Route path="/grooming" element={<Grooming />} />}
+          {!IS_STATIC && (
+            <Route
+              path="/grooming"
+              element={
+                <Grooming key={`${teamKey}-${sprintId}`} teamKey={teamKey} sprintId={sprintId} />
+              }
+            />
+          )}
         </Routes>
       </main>
     </div>

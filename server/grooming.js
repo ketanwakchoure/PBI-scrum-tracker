@@ -1,139 +1,206 @@
-// Backlog grooming: enrich a set of Jira issues for a grooming session and
-// apply SP/subtask changes back to Jira. Items are entered by key — no
-// external sources.
+// Backlog grooming: sprint-wide tracker tree with inline SP updates and
+// subtask creation. Issue types and their required fields come from Jira's
+// create-metadata, so the UI can prompt for whatever Jira actually requires.
 import config from './config.js';
-import { jiraRequest } from './jira.js';
+import { jiraRequest, searchIssues } from './jira.js';
+import { teamJql } from './teams.js';
 
-// Jira subtask type mapping for the PRE project.
-export const SUBTASK_TYPES = {
-  analysis: { id: '12550', name: 'Analysis', label: 'Analysis' },
-  dev: { id: '10437', name: 'Code', label: 'Dev' },
-  qa: { id: '12552', name: 'Manual test execution', label: 'QA' },
-  codeReview: { id: '12451', name: 'Review', label: 'Code Review' }
-};
+const FIELDS = [
+  'summary',
+  'issuetype',
+  'status',
+  'assignee',
+  'parent',
+  'components',
+  config.storyPointsField
+];
 
-const JIRA_KEY_PATTERN = /(?:PRE|IO|CIP|CLOUDOPS)-\d+/gi;
-
-export function parseKeys(input) {
-  const matches = String(input || '').toUpperCase().match(JIRA_KEY_PATTERN) || [];
-  return [...new Set(matches)];
-}
-
-async function getIssueBasic(key) {
-  const fields = `summary,issuetype,components,assignee,status,${config.storyPointsField}`;
-  const data = await jiraRequest('GET', `/rest/api/3/issue/${key}?fields=${fields}`);
+function shape(issue) {
   return {
-    key: data.key,
-    summary: data.fields.summary || '',
-    issueTypeName: data.fields.issuetype?.name || '',
-    status: data.fields.status?.name || '',
-    assignee: data.fields.assignee?.displayName || null,
-    components: (data.fields.components || []).map((c) => ({ id: c.id, name: c.name })),
-    storyPoints: data.fields[config.storyPointsField] ?? null
+    key: issue.key,
+    summary: issue.fields.summary || '',
+    type: issue.fields.issuetype?.name || '',
+    subtask: Boolean(issue.fields.issuetype?.subtask),
+    status: issue.fields.status?.name || '',
+    statusCategory: issue.fields.status?.statusCategory?.key || 'new',
+    assignee: issue.fields.assignee?.displayName || null,
+    components: (issue.fields.components || []).map((c) => ({ id: c.id, name: c.name })),
+    storyPoints: issue.fields[config.storyPointsField] ?? null,
+    parentKey: issue.fields.parent?.key || null
   };
 }
 
-async function getExistingSubtasks(parentKey) {
-  const jql = encodeURIComponent(`parent = ${parentKey} ORDER BY issuetype, key`);
-  const fields = `summary,issuetype,status,assignee,${config.storyPointsField}`;
-  const data = await jiraRequest(
+// ── Create-metadata: which subtask types exist, and what each requires ──
+
+// Fields we fill automatically when creating a subtask; anything else that
+// Jira marks required must be prompted for in the UI.
+const AUTO_FILLED = new Set([
+  'project',
+  'issuetype',
+  'parent',
+  'summary',
+  'components',
+  config.storyPointsField,
+  'reporter'
+]);
+
+let createMetaCache = { data: null, at: 0 };
+
+export async function getSubtaskCreateMeta() {
+  if (createMetaCache.data && Date.now() - createMetaCache.at < 6 * 60 * 60 * 1000) {
+    return createMetaCache.data;
+  }
+  const typesRes = await jiraRequest(
     'GET',
-    `/rest/api/3/search/jql?jql=${jql}&fields=${fields}&maxResults=100`
+    `/rest/api/3/issue/createmeta/${config.projectKey}/issuetypes?maxResults=200`
   );
-  return (data.issues || []).map((issue) => ({
-    key: issue.key,
-    summary: issue.fields.summary || '',
-    issueTypeName: issue.fields.issuetype?.name || '',
-    status: issue.fields.status?.name || '',
-    storyPoints: issue.fields[config.storyPointsField] ?? null,
-    assignee: issue.fields.assignee?.displayName || 'Unassigned'
-  }));
+  const subtaskTypes = (typesRes.issueTypes || typesRes.values || []).filter((t) => t.subtask);
+
+  const types = await Promise.all(
+    subtaskTypes.map(async (t) => {
+      const fieldsRes = await jiraRequest(
+        'GET',
+        `/rest/api/3/issue/createmeta/${config.projectKey}/issuetypes/${t.id}?maxResults=200`
+      );
+      const fields = fieldsRes.fields || fieldsRes.values || [];
+      const requiredExtras = fields
+        .filter(
+          (f) =>
+            f.required &&
+            !f.hasDefaultValue &&
+            !AUTO_FILLED.has(f.fieldId || f.key)
+        )
+        .map((f) => ({
+          key: f.fieldId || f.key,
+          name: f.name,
+          schemaType: f.schema?.type || 'string',
+          allowedValues: (f.allowedValues || []).map((v) => ({
+            id: v.id,
+            label: v.value || v.name || String(v.id)
+          }))
+        }));
+      return { id: t.id, name: t.name, requiredExtras };
+    })
+  );
+  createMetaCache = { data: types, at: Date.now() };
+  return types;
 }
 
-// One call returns everything the grooming screen needs for the given keys.
-export async function loadGroomingItems(keys) {
-  const [components, items] = await Promise.all([
-    jiraRequest('GET', `/rest/api/3/project/${config.projectKey}/components`).then((data) =>
-      data.map((c) => ({ id: c.id, name: c.name }))
-    ),
-    Promise.all(
-      keys.map(async (key) => {
-        try {
-          const [parent, existingSubtasks] = await Promise.all([
-            getIssueBasic(key),
-            getExistingSubtasks(key)
-          ]);
-          return { id: key, jiraKey: key, parent, existingSubtasks };
-        } catch (err) {
-          return { id: key, jiraKey: key, error: err.message, existingSubtasks: [] };
-        }
-      })
-    )
+// ── Sprint tracker tree ──
+
+export async function loadSprintTrackers(team, sprintId) {
+  const sprintClause = sprintId ? `sprint = ${Number(sprintId)}` : 'sprint in openSprints()';
+  const sprintIssues = await searchIssues(`${sprintClause} AND ${teamJql(team)}`, FIELDS);
+
+  const parents = sprintIssues.filter((i) => !i.fields.issuetype?.subtask);
+  // The sprint query can miss subtasks that lack the team field: fetch every
+  // child of the sprint's parents so the tree is complete.
+  const children = [];
+  const parentKeys = parents.map((p) => p.key);
+  for (let i = 0; i < parentKeys.length; i += 50) {
+    const chunk = parentKeys.slice(i, i + 50);
+    children.push(...(await searchIssues(`parent in (${chunk.join(',')})`, FIELDS)));
+  }
+
+  const byParent = {};
+  for (const child of children) {
+    const p = child.fields.parent?.key;
+    if (p) (byParent[p] = byParent[p] || []).push(shape(child));
+  }
+
+  const [types, componentsRes] = await Promise.all([
+    getSubtaskCreateMeta(),
+    jiraRequest('GET', `/rest/api/3/project/${config.projectKey}/components`)
   ]);
+
+  const trackers = parents
+    .map((p) => ({
+      ...shape(p),
+      subtasks: (byParent[p.key] || []).sort((a, b) => a.key.localeCompare(b.key))
+    }))
+    .sort(
+      (a, b) =>
+        (a.statusCategory === 'done') - (b.statusCategory === 'done') ||
+        a.key.localeCompare(b.key)
+    );
+
   return {
     fetchedAt: new Date().toISOString(),
-    items,
-    components,
-    subtaskTypes: SUBTASK_TYPES,
+    team: { key: team.key, name: team.name },
+    trackers,
+    subtaskTypes: types,
+    components: componentsRes.map((c) => ({ id: c.id, name: c.name })),
     jiraBaseUrl: config.jiraBaseUrl
   };
 }
 
-// ── Jira writes ──
+// ── Writes ──
 
-export async function applyGrooming({ subtasks = [], parentSpUpdates = [] }) {
+function coerceFieldValue(schemaType, value, allowedValues) {
+  if (schemaType === 'number') return Number(value);
+  if (schemaType === 'option') return { id: String(value) };
+  if (schemaType === 'array') {
+    const arr = Array.isArray(value) ? value : [value];
+    return arr.map((v) => (allowedValues?.length ? { id: String(v) } : String(v)));
+  }
+  if (schemaType === 'user') return { accountId: String(value) };
+  if (schemaType === 'priority' || schemaType === 'issuetype') return { id: String(value) };
+  return value;
+}
+
+export async function applyGrooming({ creates = [], spUpdates = [] }, meta) {
   const createResults = [];
-  for (const sub of subtasks) {
-    const typeInfo = SUBTASK_TYPES[sub.category];
-    if (!typeInfo) {
-      createResults.push({
-        parentKey: sub.parentKey,
-        category: sub.category,
-        success: false,
-        error: `Unknown subtask category: ${sub.category}`
-      });
-      continue;
-    }
+  for (const c of creates) {
     try {
+      const typeMeta = (meta || []).find((t) => t.id === String(c.issueTypeId));
       const fields = {
         project: { key: config.projectKey },
-        parent: { key: sub.parentKey },
-        issuetype: { id: typeInfo.id },
-        summary: sub.summary,
-        components: (sub.componentIds || []).map((id) => ({ id }))
+        parent: { key: c.parentKey },
+        issuetype: { id: String(c.issueTypeId) },
+        summary: c.summary,
+        components: (c.componentIds || []).map((id) => ({ id }))
       };
-      if (sub.storyPoints !== null && sub.storyPoints !== undefined) {
-        fields[config.storyPointsField] = sub.storyPoints;
+      if (c.storyPoints !== null && c.storyPoints !== undefined && c.storyPoints !== '') {
+        fields[config.storyPointsField] = Number(c.storyPoints);
+      }
+      for (const [key, value] of Object.entries(c.extraFields || {})) {
+        if (value === '' || value === null || value === undefined) continue;
+        const fieldMeta = typeMeta?.requiredExtras?.find((f) => f.key === key);
+        fields[key] = coerceFieldValue(
+          fieldMeta?.schemaType || 'string',
+          value,
+          fieldMeta?.allowedValues
+        );
       }
       const data = await jiraRequest('POST', '/rest/api/3/issue', { fields });
       createResults.push({
-        parentKey: sub.parentKey,
-        category: sub.category,
+        parentKey: c.parentKey,
+        typeName: typeMeta?.name || c.issueTypeId,
         success: true,
         createdKey: data.key,
         createdUrl: `${config.jiraBaseUrl}/browse/${data.key}`
       });
     } catch (err) {
       createResults.push({
-        parentKey: sub.parentKey,
-        category: sub.category,
+        parentKey: c.parentKey,
+        typeName: c.issueTypeId,
         success: false,
         error: err.message
       });
     }
   }
 
-  const parentSpResults = [];
-  for (const upd of parentSpUpdates) {
+  const spResults = [];
+  for (const upd of spUpdates) {
     try {
       await jiraRequest('PUT', `/rest/api/3/issue/${upd.issueKey}`, {
-        fields: { [config.storyPointsField]: upd.storyPoints }
+        fields: { [config.storyPointsField]: Number(upd.storyPoints) }
       });
-      parentSpResults.push({ issueKey: upd.issueKey, success: true });
+      spResults.push({ issueKey: upd.issueKey, success: true });
     } catch (err) {
-      parentSpResults.push({ issueKey: upd.issueKey, success: false, error: err.message });
+      spResults.push({ issueKey: upd.issueKey, success: false, error: err.message });
     }
   }
 
-  return { createResults, parentSpResults };
+  return { createResults, spResults };
 }

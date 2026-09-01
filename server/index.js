@@ -5,7 +5,7 @@ import { buildSprintData } from './transform.js';
 import { TEAMS, DEFAULT_TEAM_KEY, resolveTeam, matchesTeam } from './teams.js';
 import { loadLive, fetchTrimmedBoardSprints } from './loader.js';
 import { loadReleases, loadEpicsData } from './epics.js';
-import { loadGroomingItems, applyGrooming, parseKeys } from './grooming.js';
+import { loadSprintTrackers, applyGrooming, getSubtaskCreateMeta } from './grooming.js';
 
 const app = express();
 app.use(express.json());
@@ -165,12 +165,12 @@ app.get('/api/epics', async (req, res) => {
   }
 });
 
-app.get('/api/grooming/items', async (req, res) => {
+app.get('/api/grooming/sprint', async (req, res) => {
   try {
     if (!config.liveMode) throw new Error('Grooming requires live Jira credentials (.env).');
-    const keys = parseKeys(req.query.keys);
-    if (!keys.length) return res.status(400).json({ error: 'No Jira keys provided' });
-    res.json(await loadGroomingItems(keys));
+    const team = resolveTeam(req.query.team);
+    const sprintId = req.query.sprintId ? String(req.query.sprintId) : null;
+    res.json(await loadSprintTrackers(team, sprintId));
   } catch (err) {
     console.error(`logName=groomingLoadFailed, error=${err.message}`);
     res.status(502).json({ error: err.message });
@@ -180,16 +180,17 @@ app.get('/api/grooming/items', async (req, res) => {
 app.post('/api/grooming/apply', async (req, res) => {
   try {
     if (!config.liveMode) throw new Error('Grooming requires live Jira credentials (.env).');
-    const { subtasks, parentSpUpdates } = req.body || {};
-    if (!Array.isArray(subtasks) && !Array.isArray(parentSpUpdates)) {
-      return res.status(400).json({ error: 'subtasks or parentSpUpdates array required' });
+    const { creates, spUpdates } = req.body || {};
+    if (!Array.isArray(creates) && !Array.isArray(spUpdates)) {
+      return res.status(400).json({ error: 'creates or spUpdates array required' });
     }
-    const results = await applyGrooming({
-      subtasks: subtasks || [],
-      parentSpUpdates: parentSpUpdates || []
-    });
+    const meta = await getSubtaskCreateMeta().catch(() => []);
+    const results = await applyGrooming(
+      { creates: creates || [], spUpdates: spUpdates || [] },
+      meta
+    );
     const created = results.createResults.filter((r) => r.success).length;
-    const updated = results.parentSpResults.filter((r) => r.success).length;
+    const updated = results.spResults.filter((r) => r.success).length;
     console.log(`logName=groomingApplied, created=${created}, spUpdated=${updated}`);
     res.json(results);
   } catch (err) {

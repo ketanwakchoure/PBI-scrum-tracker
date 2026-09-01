@@ -1079,6 +1079,64 @@ a {
   cursor: pointer;
 }
 
+.chevron-btn {
+  background: none;
+  border: none;
+  color: var(--ink-tertiary);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px;
+  transition: transform 0.2s;
+}
+
+.chevron-btn.up {
+  transform: rotate(180deg);
+}
+
+.btn-small {
+  padding: 5px 10px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.grooming-sp.dirty {
+  border-color: var(--accent);
+  color: var(--accent-hover);
+}
+
+.grooming-type {
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-btn);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 12px;
+  padding: 6px 8px;
+  width: 170px;
+  flex-shrink: 0;
+}
+
+.grooming-sub-summary {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--ink-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.grooming-required {
+  border-color: var(--warn) !important;
+}
+
+.new-subtask {
+  background: var(--surface-2);
+  border: 1px dashed var(--hairline-strong);
+  border-radius: var(--radius-btn);
+  padding: 8px 10px;
+}
+
 .grooming-results {
   display: flex;
   flex-wrap: wrap;

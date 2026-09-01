@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
-// One-step backlog grooming: paste the Jira keys being groomed, edit the SP
-// breakdown / subtasks inline, and apply everything to Jira with one click.
-
-const CATEGORIES = ['analysis', 'dev', 'qa', 'codeReview'];
+// Sprint grooming: every tracker of the selected team+sprint, expandable to
+// its subtasks (two levels). Story points are editable inline on any tracker,
+// new subtasks can be added with the types Jira supports (required fields are
+// prompted from Jira's create-metadata), and one Apply pushes everything.
 
 function parseSp(v) {
   if (v === '' || v === null || v === undefined) return null;
@@ -11,133 +11,184 @@ function parseSp(v) {
   return Number.isNaN(n) ? null : n;
 }
 
-function defaultRows(item, subtaskTypes) {
-  const rows = {};
-  const description = item.parent?.summary || item.jiraKey;
-  for (const cat of CATEGORIES) {
-    const label = subtaskTypes[cat]?.label || cat;
-    rows[cat] = {
-      enabled: false,
-      sp: '',
-      summary: `${label}: ${item.jiraKey} - ${description}`,
-      componentIds: item.parent?.components?.map((c) => c.id) || []
-    };
-  }
-  return rows;
-}
-
-function ComponentPicker({ components, selected, onChange }) {
+function SpInput({ original, value, onChange }) {
+  const dirty = value !== undefined && parseSp(value) !== (original ?? null);
   return (
-    <details className="component-picker">
-      <summary>
-        {selected.length
-          ? components
-              .filter((c) => selected.includes(c.id))
-              .map((c) => c.name)
-              .join(', ') || `${selected.length} selected`
-          : 'No components'}
-      </summary>
-      <div className="component-menu">
-        {components.map((c) => (
-          <label key={c.id}>
-            <input
-              type="checkbox"
-              checked={selected.includes(c.id)}
-              onChange={(e) =>
-                onChange(
-                  e.target.checked ? [...selected, c.id] : selected.filter((id) => id !== c.id)
-                )
-              }
-            />
-            {c.name}
-          </label>
-        ))}
-      </div>
-    </details>
+    <input
+      type="number"
+      step="0.1"
+      min="0"
+      className={`grooming-sp${dirty ? ' dirty' : ''}`}
+      placeholder="SP"
+      value={value !== undefined ? value : original ?? ''}
+      onChange={(e) => onChange(e.target.value)}
+      title={dirty ? `Will update (was ${original ?? 'unset'})` : 'Story points'}
+    />
   );
 }
 
-export default function Grooming() {
-  const [keysInput, setKeysInput] = useState('');
+function RequiredFieldInput({ field, value, onChange }) {
+  if (field.allowedValues.length) {
+    return (
+      <select
+        className="grooming-sp grooming-required"
+        value={value ?? ''}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        <option value="">{field.name}…</option>
+        {field.allowedValues.map((v) => (
+          <option key={v.id} value={v.id}>
+            {v.label}
+          </option>
+        ))}
+      </select>
+    );
+  }
+  return (
+    <input
+      type={field.schemaType === 'number' ? 'number' : 'text'}
+      className="grooming-summary grooming-required"
+      placeholder={`${field.name} (required)`}
+      value={value ?? ''}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  );
+}
+
+function NewSubtaskRow({ draft, types, components, onChange, onRemove }) {
+  const typeMeta = types.find((t) => t.id === draft.issueTypeId);
+  return (
+    <div className="grooming-row new-subtask">
+      <select
+        className="grooming-type"
+        value={draft.issueTypeId}
+        onChange={(e) => onChange({ issueTypeId: e.target.value, extraFields: {} })}
+      >
+        {types.map((t) => (
+          <option key={t.id} value={t.id}>
+            {t.name}
+          </option>
+        ))}
+      </select>
+      <input
+        type="number"
+        step="0.1"
+        min="0"
+        className="grooming-sp"
+        placeholder="SP"
+        value={draft.storyPoints}
+        onChange={(e) => onChange({ storyPoints: e.target.value })}
+      />
+      <input
+        type="text"
+        className="grooming-summary"
+        value={draft.summary}
+        onChange={(e) => onChange({ summary: e.target.value })}
+      />
+      {(typeMeta?.requiredExtras || []).map((f) => (
+        <RequiredFieldInput
+          key={f.key}
+          field={f}
+          value={draft.extraFields[f.key]}
+          onChange={(v) => onChange({ extraFields: { ...draft.extraFields, [f.key]: v } })}
+        />
+      ))}
+      <button type="button" className="link-btn" onClick={onRemove}>
+        remove
+      </button>
+    </div>
+  );
+}
+
+export default function Grooming({ teamKey, sprintId }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState(false);
   const [results, setResults] = useState(null);
+  const [open, setOpen] = useState(() => new Set());
+  const [spEdits, setSpEdits] = useState({}); // issueKey -> input string
+  const [drafts, setDrafts] = useState({}); // parentKey -> draft[]
 
-  // Edit state, keyed by item id.
-  const [modes, setModes] = useState({}); // 'subtasks' | 'parent-sp'
-  const [rows, setRows] = useState({}); // itemId -> cat -> {enabled, sp, summary, componentIds}
-  const [parentSp, setParentSp] = useState({}); // itemId -> string
-
-  const load = async () => {
-    if (!keysInput.trim()) return;
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     setResults(null);
     try {
-      const res = await fetch(`/api/grooming/items?keys=${encodeURIComponent(keysInput)}`);
+      const params = new URLSearchParams({ team: teamKey || 'iota' });
+      if (sprintId) params.set('sprintId', sprintId);
+      const res = await fetch(`/api/grooming/sprint?${params}`);
       const body = await res.json();
       if (body.error) throw new Error(body.error);
       setData(body);
-      const initRows = {};
-      for (const item of body.items) initRows[item.id] = defaultRows(item, body.subtaskTypes);
-      setRows(initRows);
-      setModes({});
-      setParentSp({});
+      setSpEdits({});
+      setDrafts({});
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  };
+  }, [teamKey, sprintId]);
 
-  const updateRow = (itemId, cat, patch) =>
-    setRows((prev) => ({
-      ...prev,
-      [itemId]: { ...prev[itemId], [cat]: { ...prev[itemId][cat], ...patch } }
-    }));
+  useEffect(() => {
+    load();
+  }, [load]);
 
-  const items = data?.items || [];
-  const subtaskTypes = data?.subtaskTypes || {};
+  const trackers = data?.trackers || [];
+  const types = data?.subtaskTypes || [];
+
+  const originalSp = useMemo(() => {
+    const map = {};
+    for (const t of trackers) {
+      map[t.key] = t.storyPoints;
+      for (const s of t.subtasks) map[s.key] = s.storyPoints;
+    }
+    return map;
+  }, [trackers]);
 
   const pending = useMemo(() => {
-    const subtasks = [];
-    const parentSpUpdates = [];
-    for (const item of items) {
-      if (item.error) continue;
-      if ((modes[item.id] || 'subtasks') === 'parent-sp') {
-        const sp = parseSp(parentSp[item.id]);
-        if (sp !== null && sp > 0) parentSpUpdates.push({ issueKey: item.jiraKey, storyPoints: sp });
-      } else {
-        for (const cat of CATEGORIES) {
-          const row = rows[item.id]?.[cat];
-          if (row?.enabled) {
-            subtasks.push({
-              parentKey: item.jiraKey,
-              category: cat,
-              summary: row.summary,
-              storyPoints: parseSp(row.sp),
-              componentIds: row.componentIds
-            });
-          }
-        }
+    const spUpdates = [];
+    for (const [key, raw] of Object.entries(spEdits)) {
+      const sp = parseSp(raw);
+      if (sp !== null && sp !== (originalSp[key] ?? null)) {
+        spUpdates.push({ issueKey: key, storyPoints: sp });
       }
     }
-    return { subtasks, parentSpUpdates };
-  }, [items, modes, rows, parentSp]);
+    const creates = [];
+    for (const [parentKey, list] of Object.entries(drafts)) {
+      for (const d of list) {
+        if (!d.summary.trim()) continue;
+        const typeMeta = types.find((t) => t.id === d.issueTypeId);
+        const missing = (typeMeta?.requiredExtras || []).some((f) => !d.extraFields[f.key]);
+        creates.push({
+          parentKey,
+          issueTypeId: d.issueTypeId,
+          summary: d.summary,
+          storyPoints: d.storyPoints,
+          componentIds: d.componentIds,
+          extraFields: d.extraFields,
+          _missingRequired: missing
+        });
+      }
+    }
+    return { spUpdates, creates };
+  }, [spEdits, drafts, originalSp, types]);
 
-  const pendingCount = pending.subtasks.length + pending.parentSpUpdates.length;
+  const blocked = pending.creates.filter((c) => c._missingRequired).length;
+  const pendingCount = pending.spUpdates.length + pending.creates.length;
 
   const apply = async () => {
-    if (!pendingCount) return;
+    if (!pendingCount || blocked) return;
     setApplying(true);
     setError(null);
     try {
       const res = await fetch('/api/grooming/apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(pending)
+        body: JSON.stringify({
+          spUpdates: pending.spUpdates,
+          creates: pending.creates.map(({ _missingRequired, ...c }) => c)
+        })
       });
       const body = await res.json();
       if (body.error) throw new Error(body.error);
@@ -149,220 +200,207 @@ export default function Grooming() {
     }
   };
 
-  const resultsFor = (item) => ({
-    created: (results?.createResults || []).filter((r) => r.parentKey === item.jiraKey),
-    sp: (results?.parentSpResults || []).filter((r) => r.issueKey === item.jiraKey)
-  });
+  const addDraft = (tracker) => {
+    const first = types[0];
+    if (!first) return;
+    setOpen((prev) => new Set(prev).add(tracker.key));
+    setDrafts((prev) => ({
+      ...prev,
+      [tracker.key]: [
+        ...(prev[tracker.key] || []),
+        {
+          issueTypeId: first.id,
+          summary: `${first.name}: ${tracker.key} - ${tracker.summary}`,
+          storyPoints: '',
+          componentIds: tracker.components.map((c) => c.id),
+          extraFields: {}
+        }
+      ]
+    }));
+  };
+
+  const updateDraft = (parentKey, idx, patch) =>
+    setDrafts((prev) => ({
+      ...prev,
+      [parentKey]: prev[parentKey].map((d, i) => {
+        if (i !== idx) return d;
+        const next = { ...d, ...patch };
+        // Changing the type refreshes the default summary prefix.
+        if (patch.issueTypeId && patch.issueTypeId !== d.issueTypeId) {
+          const t = types.find((x) => x.id === patch.issueTypeId);
+          const oldT = types.find((x) => x.id === d.issueTypeId);
+          if (t && oldT && d.summary.startsWith(`${oldT.name}:`)) {
+            next.summary = d.summary.replace(`${oldT.name}:`, `${t.name}:`);
+          }
+        }
+        return next;
+      })
+    }));
+
+  const toggle = (key) =>
+    setOpen((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+
+  if (loading) return <div className="loading">Loading sprint trackers…</div>;
+  if (error && !data) return <div className="error-banner">Failed to load: {error}</div>;
+  if (!data) return null;
 
   return (
     <>
       <section className="epic-toolbar">
-        <div className="grooming-loader">
-          <input
-            type="text"
-            className="grooming-keys"
-            placeholder="Jira keys to groom, e.g. PRE-27712 PRE-27725 PRE-27678"
-            value={keysInput}
-            onChange={(e) => setKeysInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && load()}
-          />
-          <button type="button" className="btn" onClick={load} disabled={loading || !keysInput.trim()}>
-            {loading ? 'Loading…' : 'Load'}
+        <div>
+          <h1 className="epic-release-title">Grooming</h1>
+          <div className="dev-meta">
+            {trackers.length} tracker{trackers.length !== 1 ? 's' : ''} in this sprint · edit SP
+            inline or add subtasks, then apply
+          </div>
+        </div>
+        <div className="grooming-actions">
+          <button type="button" className="btn" onClick={load} disabled={applying}>
+            Reload
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={apply}
+            disabled={applying || !pendingCount || blocked > 0}
+            title={
+              blocked
+                ? `${blocked} new subtask(s) missing required fields`
+                : 'Applies SP updates and creates new subtasks in Jira'
+            }
+          >
+            {applying ? 'Applying…' : `Apply to Jira (${pendingCount})`}
           </button>
         </div>
-        {data && (
-          <div className="grooming-actions">
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={apply}
-              disabled={applying || !pendingCount}
-              title="Creates the enabled subtasks and applies parent SP updates in Jira"
-            >
-              {applying ? 'Applying…' : `Apply to Jira (${pendingCount})`}
-            </button>
-          </div>
-        )}
       </section>
 
       {error && <div className="error-banner">{error}</div>}
-      {results && (
-        <div className="grooming-summary">
-          Created {results.createResults.filter((r) => r.success).length}/
-          {results.createResults.length} subtasks
-          {results.parentSpResults.length > 0 &&
-            ` · updated SP on ${results.parentSpResults.filter((r) => r.success).length}/${results.parentSpResults.length} parents`}
-          {' · '}
-          <button type="button" className="link-btn" onClick={load}>
-            reload items
-          </button>
+      {blocked > 0 && (
+        <div className="error-banner">
+          {blocked} new subtask{blocked !== 1 ? 's are' : ' is'} missing required fields (marked
+          inputs) — fill them to enable Apply.
         </div>
       )}
-
-      {!data && !loading && (
-        <div className="loading">
-          Paste the Jira keys for this grooming session above — details, existing subtasks, and
-          components load in one go.
+      {results && (
+        <div className="grooming-summary">
+          {results.createResults.length > 0 &&
+            `Created ${results.createResults.filter((r) => r.success).length}/${results.createResults.length} subtasks`}
+          {results.createResults.length > 0 && results.spResults.length > 0 && ' · '}
+          {results.spResults.length > 0 &&
+            `updated SP on ${results.spResults.filter((r) => r.success).length}/${results.spResults.length} trackers`}
+          {' · '}
+          <button type="button" className="link-btn" onClick={load}>
+            reload
+          </button>
+          {results.createResults
+            .filter((r) => !r.success)
+            .map((r) => (
+              <div key={r.parentKey + r.typeName} className="err-text">
+                {r.parentKey} {r.typeName}: {r.error}
+              </div>
+            ))}
+          {results.spResults
+            .filter((r) => !r.success)
+            .map((r) => (
+              <div key={r.issueKey} className="err-text">
+                {r.issueKey}: {r.error}
+              </div>
+            ))}
         </div>
       )}
 
       <section className="dev-list">
-        {items.map((item) => {
-          const mode = modes[item.id] || 'subtasks';
-          const itemResults = resultsFor(item);
+        {trackers.map((t) => {
+          const isOpen = open.has(t.key);
           return (
-            <div key={item.id} className="dev-card open grooming-card">
+            <div key={t.key} className={`dev-card${isOpen ? ' open' : ''}`}>
               <div className="grooming-head">
+                <button type="button" className={`chevron-btn${isOpen ? ' up' : ''}`} onClick={() => toggle(t.key)}>
+                  ▾
+                </button>
                 <div className="task-key mono">
                   <a
-                    href={`${data.jiraBaseUrl}/browse/${item.jiraKey}`}
+                    href={`${data.jiraBaseUrl}/browse/${t.key}`}
                     target="_blank"
                     rel="noreferrer"
                     className="issue-link"
                   >
-                    {item.jiraKey}
+                    {t.key}
                   </a>
                 </div>
-                {item.error ? (
-                  <div className="grooming-title">
-                    <div className="err-text">{item.error}</div>
+                <div className="grooming-title">
+                  <div className="dev-name">{t.summary}</div>
+                  <div className="dev-meta">
+                    <span className="tracker-type">{t.type}</span>
+                    <span className={`pill ${t.statusCategory}`}>{t.status}</span>
+                    {t.assignee && ` ${t.assignee}`}
+                    {` · ${t.subtasks.length} subtask${t.subtasks.length !== 1 ? 's' : ''}`}
                   </div>
-                ) : (
-                  <>
-                    <div className="grooming-title">
-                      <div className="dev-name">{item.parent.summary}</div>
-                      <div className="dev-meta">
-                        <span className="tracker-type">{item.parent.issueTypeName}</span>
-                        {` ${item.parent.status}`}
-                        {item.parent.assignee && ` · ${item.parent.assignee}`}
-                        {item.parent.storyPoints != null && ` · parent SP: ${item.parent.storyPoints}`}
-                      </div>
-                      {item.existingSubtasks.length > 0 && (
-                        <div className="grooming-existing">
-                          Already has {item.existingSubtasks.length} subtask
-                          {item.existingSubtasks.length !== 1 ? 's' : ''}:{' '}
-                          {item.existingSubtasks
-                            .map((s) => `${s.key} (${s.storyPoints ?? '—'})`)
-                            .join(', ')}
-                        </div>
-                      )}
-                    </div>
-                    <div className="grooming-mode">
-                      <button
-                        type="button"
-                        className={`chip${mode === 'subtasks' ? ' active' : ''}`}
-                        onClick={() => setModes((p) => ({ ...p, [item.id]: 'subtasks' }))}
-                      >
-                        Subtasks
-                      </button>
-                      <button
-                        type="button"
-                        className={`chip${mode === 'parent-sp' ? ' active' : ''}`}
-                        onClick={() => setModes((p) => ({ ...p, [item.id]: 'parent-sp' }))}
-                      >
-                        Parent SP
-                      </button>
-                    </div>
-                  </>
-                )}
+                </div>
+                <SpInput
+                  original={t.storyPoints}
+                  value={spEdits[t.key]}
+                  onChange={(v) => setSpEdits((p) => ({ ...p, [t.key]: v }))}
+                />
+                <button type="button" className="btn btn-small" onClick={() => addDraft(t)}>
+                  + Subtask
+                </button>
               </div>
 
-              {!item.error &&
-                (mode === 'parent-sp' ? (
-                  <div className="grooming-rows">
-                    <div className="grooming-row">
-                      <span className="grooming-cat">Parent SP</span>
-                      <input
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        className="grooming-sp"
-                        placeholder="SP"
-                        value={parentSp[item.id] ?? ''}
-                        onChange={(e) => setParentSp((p) => ({ ...p, [item.id]: e.target.value }))}
-                      />
-                      <span className="dev-meta">sets {item.jiraKey}'s story points directly</span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="grooming-rows">
-                    {CATEGORIES.map((cat) => {
-                      const row = rows[item.id]?.[cat];
-                      if (!row) return null;
-                      return (
-                        <div key={cat} className={`grooming-row${row.enabled ? '' : ' disabled'}`}>
-                          <label className="grooming-enable">
-                            <input
-                              type="checkbox"
-                              checked={row.enabled}
-                              onChange={(e) =>
-                                updateRow(item.id, cat, { enabled: e.target.checked })
-                              }
-                            />
-                            <span className="grooming-cat">{subtaskTypes[cat]?.label || cat}</span>
-                          </label>
-                          <input
-                            type="number"
-                            step="0.1"
-                            min="0"
-                            className="grooming-sp"
-                            placeholder="SP"
-                            value={row.sp}
-                            onChange={(e) =>
-                              updateRow(item.id, cat, {
-                                sp: e.target.value,
-                                enabled: parseSp(e.target.value) > 0
-                              })
-                            }
-                          />
-                          <input
-                            type="text"
-                            className="grooming-summary"
-                            value={row.summary}
-                            onChange={(e) => updateRow(item.id, cat, { summary: e.target.value })}
-                          />
-                          <ComponentPicker
-                            components={data.components}
-                            selected={row.componentIds}
-                            onChange={(componentIds) => updateRow(item.id, cat, { componentIds })}
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                ))}
-
-              {(itemResults.created.length > 0 || itemResults.sp.length > 0) && (
-                <div className="grooming-results">
-                  {itemResults.created.map((r) => (
-                    <span
-                      key={`${r.category}-${r.createdKey || r.error}`}
-                      className={r.success ? 'ok-text' : 'err-text'}
-                    >
-                      {r.success ? (
+              {isOpen && (
+                <div className="grooming-rows">
+                  {t.subtasks.map((s) => (
+                    <div key={s.key} className="grooming-row">
+                      <span className="task-key mono">
                         <a
-                          className="issue-link"
-                          href={r.createdUrl}
+                          href={`${data.jiraBaseUrl}/browse/${s.key}`}
                           target="_blank"
                           rel="noreferrer"
+                          className="issue-link"
                         >
-                          {r.createdKey}
+                          {s.key}
                         </a>
-                      ) : (
-                        `${subtaskTypes[r.category]?.label || r.category}: ${r.error}`
-                      )}
-                    </span>
+                      </span>
+                      <span className="grooming-sub-summary">
+                        <span className="tracker-type">{s.type}</span>
+                        {s.summary}
+                      </span>
+                      <span className={`pill ${s.statusCategory}`}>{s.status}</span>
+                      <SpInput
+                        original={s.storyPoints}
+                        value={spEdits[s.key]}
+                        onChange={(v) => setSpEdits((p) => ({ ...p, [s.key]: v }))}
+                      />
+                    </div>
                   ))}
-                  {itemResults.sp.map((r) => (
-                    <span key={r.issueKey} className={r.success ? 'ok-text' : 'err-text'}>
-                      {r.success ? 'parent SP updated' : `SP update failed: ${r.error}`}
-                    </span>
+                  {!t.subtasks.length && !(drafts[t.key] || []).length && (
+                    <div className="epic-empty">No subtasks yet — add one above.</div>
+                  )}
+                  {(drafts[t.key] || []).map((d, idx) => (
+                    <NewSubtaskRow
+                      key={idx}
+                      draft={d}
+                      types={types}
+                      components={data.components}
+                      onChange={(patch) => updateDraft(t.key, idx, patch)}
+                      onRemove={() =>
+                        setDrafts((prev) => ({
+                          ...prev,
+                          [t.key]: prev[t.key].filter((_, i) => i !== idx)
+                        }))
+                      }
+                    />
                   ))}
                 </div>
               )}
             </div>
           );
         })}
+        {!trackers.length && <div className="loading">No trackers in this sprint for this team.</div>}
       </section>
     </>
   );
