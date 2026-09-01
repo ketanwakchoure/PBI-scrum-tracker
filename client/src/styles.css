@@ -131,8 +131,9 @@ a {
 }
 
 .tab.active {
-  background: var(--surface-3);
-  color: var(--ink);
+  background: linear-gradient(135deg, var(--accent), #7b86f0);
+  color: #fff;
+  box-shadow: 0 2px 10px rgba(94, 106, 210, 0.4);
 }
 
 .topbar-right {
@@ -180,9 +181,11 @@ a {
   transition: background-color 0.15s, border-color 0.15s;
 }
 
-.sprint-select:hover {
-  background: var(--surface-2);
-  border-color: var(--hairline-strong);
+.sprint-select:hover,
+.sprint-select:focus {
+  background: rgba(94, 106, 210, 0.1);
+  border-color: var(--accent);
+  outline: none;
 }
 
 .btn {
@@ -198,8 +201,9 @@ a {
 }
 
 .btn:hover:not(:disabled) {
-  background: var(--surface-2);
-  border-color: var(--hairline-strong);
+  background: rgba(94, 106, 210, 0.12);
+  border-color: var(--accent);
+  color: var(--accent-hover);
 }
 
 .btn:active:not(:disabled) {
@@ -358,7 +362,8 @@ a {
 
 .dev-card.open {
   background: var(--surface-2);
-  border-color: var(--hairline-strong);
+  border-color: rgba(94, 106, 210, 0.55);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .dev-head {
@@ -657,9 +662,10 @@ a {
 }
 
 .chip.active {
-  color: var(--ink);
-  background: var(--surface-2);
-  border-color: var(--hairline-strong);
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent), #7b86f0);
+  border-color: transparent;
+  box-shadow: 0 2px 10px rgba(94, 106, 210, 0.4);
 }
 
 .chip-sp {
@@ -673,7 +679,8 @@ a {
 }
 
 .chip.active .chip-sp {
-  color: var(--ink);
+  color: #fff;
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .panel {
@@ -918,14 +925,17 @@ a {
 }
 
 .btn-primary {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: linear-gradient(135deg, var(--accent), #7b86f0);
+  border-color: transparent;
   color: #fff;
+  box-shadow: 0 2px 12px rgba(94, 106, 210, 0.45);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
+  background: linear-gradient(135deg, var(--accent-hover), #98a1ff);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(130, 143, 255, 0.5);
 }
 
 .grooming-summary {
@@ -1109,7 +1119,9 @@ a {
 
 .grooming-sp.dirty {
   border-color: var(--accent);
-  color: var(--accent-hover);
+  color: #fff;
+  background: rgba(94, 106, 210, 0.25);
+  box-shadow: 0 0 0 1px var(--accent);
 }
 
 .grooming-type {
