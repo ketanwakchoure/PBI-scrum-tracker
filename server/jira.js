@@ -4,7 +4,7 @@ import { teamJql } from './teams.js';
 const authHeader = () =>
   'Basic ' + Buffer.from(`${config.jiraEmail}:${config.jiraApiToken}`).toString('base64');
 
-async function jiraRequest(method, apiPath, body) {
+export async function jiraRequest(method, apiPath, body) {
   const res = await fetch(`${config.jiraBaseUrl}${apiPath}`, {
     method,
     headers: {

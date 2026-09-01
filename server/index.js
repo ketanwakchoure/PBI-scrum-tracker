@@ -5,8 +5,10 @@ import { buildSprintData } from './transform.js';
 import { TEAMS, DEFAULT_TEAM_KEY, resolveTeam, matchesTeam } from './teams.js';
 import { loadLive, fetchTrimmedBoardSprints } from './loader.js';
 import { loadReleases, loadEpicsData } from './epics.js';
+import { loadGroomingItems, applyGrooming, parseKeys } from './grooming.js';
 
 const app = express();
+app.use(express.json());
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -159,6 +161,39 @@ app.get('/api/epics', async (req, res) => {
     res.json(data);
   } catch (err) {
     console.error(`logName=epicsFailed, error=${err.message}`);
+    res.status(502).json({ error: err.message });
+  }
+});
+
+app.get('/api/grooming/items', async (req, res) => {
+  try {
+    if (!config.liveMode) throw new Error('Grooming requires live Jira credentials (.env).');
+    const keys = parseKeys(req.query.keys);
+    if (!keys.length) return res.status(400).json({ error: 'No Jira keys provided' });
+    res.json(await loadGroomingItems(keys));
+  } catch (err) {
+    console.error(`logName=groomingLoadFailed, error=${err.message}`);
+    res.status(502).json({ error: err.message });
+  }
+});
+
+app.post('/api/grooming/apply', async (req, res) => {
+  try {
+    if (!config.liveMode) throw new Error('Grooming requires live Jira credentials (.env).');
+    const { subtasks, parentSpUpdates } = req.body || {};
+    if (!Array.isArray(subtasks) && !Array.isArray(parentSpUpdates)) {
+      return res.status(400).json({ error: 'subtasks or parentSpUpdates array required' });
+    }
+    const results = await applyGrooming({
+      subtasks: subtasks || [],
+      parentSpUpdates: parentSpUpdates || []
+    });
+    const created = results.createResults.filter((r) => r.success).length;
+    const updated = results.parentSpResults.filter((r) => r.success).length;
+    console.log(`logName=groomingApplied, created=${created}, spUpdated=${updated}`);
+    res.json(results);
+  } catch (err) {
+    console.error(`logName=groomingApplyFailed, error=${err.message}`);
     res.status(502).json({ error: err.message });
   }
 });

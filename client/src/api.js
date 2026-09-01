@@ -5,6 +5,9 @@ import { useEffect, useState, useCallback } from 'react';
 const STATIC = import.meta.env.VITE_STATIC_DATA === 'true';
 const BASE = import.meta.env.BASE_URL || '/';
 
+// The Grooming tab writes to Jira, which needs the live server.
+export const IS_STATIC = STATIC;
+
 
 async function fetchJson(url) {
   const res = await fetch(url);

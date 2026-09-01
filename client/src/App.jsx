@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Route, Routes, useLocation } from 'react-router-dom';
-import { useSprintData, useSprintList, useReleases } from './api.js';
+import { useSprintData, useSprintList, useReleases, IS_STATIC } from './api.js';
 import Overview from './pages/Overview.jsx';
 import Burnup from './pages/Burnup.jsx';
 import Epics from './pages/Epics.jsx';
+import Grooming from './pages/Grooming.jsx';
 
 function workingDaysLeft(burnup) {
   if (!burnup?.workingDays?.length) return null;
@@ -22,7 +23,9 @@ export default function App() {
   const { data, loading, error, refresh } = sprintState;
   const left = workingDaysLeft(data?.burnup);
   const teamName = data?.team?.name || teams.find((t) => t.key === teamKey)?.name || 'IOTA (PBI)';
-  const onEpicsPage = useLocation().pathname.startsWith('/epics');
+  const pathname = useLocation().pathname;
+  const onEpicsPage = pathname.startsWith('/epics');
+  const onGroomingPage = pathname.startsWith('/grooming');
 
   // Default to the newest release; reset when the team's release list changes.
   useEffect(() => {
@@ -59,6 +62,11 @@ export default function App() {
           <NavLink to="/epics" className={({ isActive }) => `tab${isActive ? ' active' : ''}`}>
             Epics
           </NavLink>
+          {!IS_STATIC && (
+            <NavLink to="/grooming" className={({ isActive }) => `tab${isActive ? ' active' : ''}`}>
+              Grooming
+            </NavLink>
+          )}
         </nav>
         <div className="topbar-right">
           {teams.length > 0 && (
@@ -75,8 +83,9 @@ export default function App() {
               ))}
             </select>
           )}
-          {/* The second picker swaps with the page: sprints normally, releases on the Epics tab. */}
-          {onEpicsPage
+          {/* The second picker swaps with the page: sprints normally, releases on
+              the Epics tab, nothing on Grooming (the sheet drives that page). */}
+          {onGroomingPage ? null : onEpicsPage
             ? (releases?.length || 0) > 0 && (
                 <select
                   className="sprint-select"
@@ -143,6 +152,7 @@ export default function App() {
             path="/epics"
             element={<Epics key={teamKey} teamKey={teamKey} release={release} />}
           />
+          {!IS_STATIC && <Route path="/grooming" element={<Grooming />} />}
         </Routes>
       </main>
     </div>
