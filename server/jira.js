@@ -18,7 +18,9 @@ export async function jiraRequest(method, apiPath, body) {
     const text = await res.text();
     throw new Error(`Jira ${method} ${apiPath} failed (${res.status}): ${text.slice(0, 300)}`);
   }
-  return res.json();
+  // Writes like PUT /issue return 204 No Content — don't JSON-parse an empty body.
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
 }
 
 const ISSUE_FIELDS = [
