@@ -1175,6 +1175,10 @@ a {
   flex-shrink: 0;
 }
 
+.grooming-assignee {
+  width: 150px;
+}
+
 .grooming-sub-summary {
   flex: 1;
   min-width: 0;

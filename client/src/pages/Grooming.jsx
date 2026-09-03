@@ -56,7 +56,7 @@ function RequiredFieldInput({ field, value, onChange }) {
   );
 }
 
-function NewSubtaskRow({ draft, types, components, onChange, onRemove }) {
+function NewSubtaskRow({ draft, types, components, users, onChange, onRemove }) {
   const typeMeta = types.find((t) => t.id === draft.issueTypeId);
   return (
     <div className="grooming-row new-subtask">
@@ -86,6 +86,19 @@ function NewSubtaskRow({ draft, types, components, onChange, onRemove }) {
         value={draft.summary}
         onChange={(e) => onChange({ summary: e.target.value })}
       />
+      <select
+        className="grooming-type grooming-assignee"
+        value={draft.assigneeId || ''}
+        onChange={(e) => onChange({ assigneeId: e.target.value })}
+        title="Assignee"
+      >
+        <option value="">Unassigned</option>
+        {users.map((u) => (
+          <option key={u.id} value={u.id}>
+            {u.name}
+          </option>
+        ))}
+      </select>
       {(typeMeta?.requiredExtras || []).map((f) => (
         <RequiredFieldInput
           key={f.key}
@@ -167,6 +180,7 @@ export default function Grooming({ teamKey, sprintId }) {
           summary: d.summary,
           storyPoints: d.storyPoints,
           componentIds: d.componentIds,
+          assigneeId: d.assigneeId || null,
           extraFields: d.extraFields,
           _missingRequired: missing
         });
@@ -216,6 +230,8 @@ export default function Grooming({ teamKey, sprintId }) {
           summary: `${first.name}: ${tracker.key} - ${tracker.summary}`,
           storyPoints: '',
           componentIds: common ? [common.id] : tracker.components.map((c) => c.id),
+          // Default new subtasks to the parent tracker's assignee.
+          assigneeId: tracker.assigneeId || '',
           extraFields: {}
         }
       ]
@@ -401,6 +417,7 @@ export default function Grooming({ teamKey, sprintId }) {
                       draft={d}
                       types={types}
                       components={data.components}
+                      users={data.assignableUsers || []}
                       onChange={(patch) => updateDraft(t.key, idx, patch)}
                       onRemove={() =>
                         setDrafts((prev) => ({

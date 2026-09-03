@@ -24,6 +24,7 @@ function shape(issue) {
     status: issue.fields.status?.name || '',
     statusCategory: issue.fields.status?.statusCategory?.key || 'new',
     assignee: issue.fields.assignee?.displayName || null,
+    assigneeId: issue.fields.assignee?.accountId || null,
     components: (issue.fields.components || []).map((c) => ({ id: c.id, name: c.name })),
     storyPoints: issue.fields[config.storyPointsField] ?? null,
     parentKey: issue.fields.parent?.key || null
@@ -45,6 +46,29 @@ const AUTO_FILLED = new Set([
 ]);
 
 let createMetaCache = { data: null, at: 0 };
+let assignableCache = { data: null, at: 0 };
+
+// People who can be assigned issues in the project (cached: it changes rarely).
+async function getAssignableUsers() {
+  if (assignableCache.data && Date.now() - assignableCache.at < 6 * 60 * 60 * 1000) {
+    return assignableCache.data;
+  }
+  const users = [];
+  for (let startAt = 0; ; startAt += 50) {
+    const page = await jiraRequest(
+      'GET',
+      `/rest/api/3/user/assignable/search?project=${config.projectKey}&startAt=${startAt}&maxResults=50`
+    );
+    users.push(...page);
+    if (page.length < 50) break;
+  }
+  const shaped = users
+    .filter((u) => u.active && u.accountType === 'atlassian')
+    .map((u) => ({ id: u.accountId, name: u.displayName }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  assignableCache = { data: shaped, at: Date.now() };
+  return shaped;
+}
 
 export async function getSubtaskCreateMeta() {
   if (createMetaCache.data && Date.now() - createMetaCache.at < 6 * 60 * 60 * 1000) {
@@ -108,9 +132,10 @@ export async function loadSprintTrackers(team, sprintId) {
     if (p) (byParent[p] = byParent[p] || []).push(shape(child));
   }
 
-  const [types, componentsRes] = await Promise.all([
+  const [types, componentsRes, assignableUsers] = await Promise.all([
     getSubtaskCreateMeta(),
-    jiraRequest('GET', `/rest/api/3/project/${config.projectKey}/components`)
+    jiraRequest('GET', `/rest/api/3/project/${config.projectKey}/components`),
+    getAssignableUsers()
   ]);
 
   const trackers = parents
@@ -130,6 +155,7 @@ export async function loadSprintTrackers(team, sprintId) {
     trackers,
     subtaskTypes: types,
     components: componentsRes.map((c) => ({ id: c.id, name: c.name })),
+    assignableUsers,
     jiraBaseUrl: config.jiraBaseUrl
   };
 }
@@ -162,6 +188,9 @@ export async function applyGrooming({ creates = [], spUpdates = [] }, meta) {
       };
       if (c.storyPoints !== null && c.storyPoints !== undefined && c.storyPoints !== '') {
         fields[config.storyPointsField] = Number(c.storyPoints);
+      }
+      if (c.assigneeId) {
+        fields.assignee = { accountId: String(c.assigneeId) };
       }
       for (const [key, value] of Object.entries(c.extraFields || {})) {
         if (value === '' || value === null || value === undefined) continue;
